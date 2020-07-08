@@ -1,37 +1,38 @@
-var async = require('async');
-var fs = require('fs');
-var path = require('path');
-var Events = require('events');
+const async = require('async'),
+fs = require('fs'),
+chokidar=require("chokidar"),
+path = require('path'),
+Events = require('events');
 
 // module.exports for all loaded modules is here
-var loaded = {};
+const loaded = {};
 
 // module itself for all loaded
-var loaded_mods = {};
+const loaded_mods = {};
 
 // function storage
-var loaded_funcs = {};
+const loaded_funcs = {};
 
 // last mtime's for filenames
-var hotswap = {};
+const hotswap = {};
 
 // it's for autoloading
-var watchfiles = true;
-var watchfilenames = {};
-var autoreload = true;
+let watchfiles = true;
+let watchfilenames = {};
+let autoreload = true;
 
 // asynchronously loaded file contents
-var fscache = {};
+const fscache = {};
 
 // it's for extension handling
-var current_extensions = {};
-var original_handlers = {};
+const current_extensions = {};
+const original_handlers = {};
 
 // in case of error we are retrying with this timeouts
-var timeouts = [100, 300, 1000];
+const timeouts = [100, 300, 1000];
 
 // it's for events generation
-var emitter = new Events.EventEmitter();
+const emitter = new Events.EventEmitter();
 
 // register new extension for hotswapping
 function register_extension(ext, type)
@@ -63,12 +64,7 @@ function restore_extension(ext)
 
 function read_file_failsafe(filename, cb)
 {
-	if (watchfilenames[filename]) {
-		watchfilenames[filename].close();
-		delete watchfilenames[filename];
-	}
 	try_read_file(filename, function(err, data) {
-		watch_file(filename);
 		if (err) {
 			emitter.emit('error', err);
 		} else {
@@ -118,10 +114,10 @@ function try_require_file(filename)
 // require specified file with our handler
 function require_file(filename)
 {
-	var ext = path.extname(filename) || '.js';
-	var type = ext == '.coffee' ? 'coffee' : 'js';
-	var reg_required = !current_extensions[ext];
-	var result;
+	let ext = path.extname(filename) || '.js';
+	let type = ext == '.coffee' ? 'coffee' : 'js';
+	let reg_required = !current_extensions[ext];
+	let result;
 	if (reg_required) register_extension(ext, type);
 	try {
 		result = require(filename);
@@ -133,9 +129,9 @@ function require_file(filename)
 
 function copy_object(dest, src)
 {
-	for (var k in src) {
-		var getter = src.__lookupGetter__(k);
-		var setter = src.__lookupSetter__(k);
+	for (let k in src) {
+		let getter = src.__lookupGetter__(k),
+		setter = src.__lookupSetter__(k);
 	
 		if (getter || setter) {
 			if (getter)
@@ -155,17 +151,17 @@ function copy_object(dest, src)
 
 function new_code(filename, newmodule)
 {
-	var newexp = newmodule.exports;
+	let newexp = newmodule.exports;
 	if (typeof(newexp) == 'object') {
 		loaded[filename] = {};
 	} else if (typeof(newexp) == 'function') {
 		loaded_funcs[filename] = newexp;
 		loaded[filename] = function() {
 			return loaded_funcs[filename].apply(this, arguments);
-		}
+		};
 	}
 
-	var actual = loaded[filename];
+	let actual = loaded[filename];
 	copy_object(actual, newexp);
 	
 	require.cache[filename].exports = actual;
@@ -173,8 +169,8 @@ function new_code(filename, newmodule)
 
 function change_code(filename, oldmodule, newmodule)
 {
-	var actual = loaded[filename];
-	var newexp = newmodule.exports;
+	let actual = loaded[filename],
+	newexp = newmodule.exports;
 
 	if (typeof(newexp) != typeof(actual)) {
 		emitter.emit('error', new Error("exports type has changed, you must restart program to make change"));
@@ -186,7 +182,7 @@ function change_code(filename, oldmodule, newmodule)
 	}
 
 	// wipe old module first
-	for (var key in actual) {
+	for (let key in actual) {
 		delete actual[key];
 	}
 
@@ -202,17 +198,16 @@ function change_code(filename, oldmodule, newmodule)
 // it is require.extension[...] handler
 function extension_js(type, module, filename)
 {
-	var is_hotswap_file = false;
-	var content = get_file_contents(filename);
+	let is_hotswap_file = false,
+	content = get_file_contents(filename);
 	delete fscache[filename];
-	var iscompiled = false;
 	
 	fs.stat(filename, function(err, stats) {
 		hotswap[filename] = stats.mtime;
 	});
 
 	if (type == 'coffee') {
-		var compiled = require('coffee-script').compile(content, {
+		let compiled = require('coffee-script').compile(content, {
 			filename: filename
 		});
 		module._compile(compiled, filename);
@@ -220,8 +215,8 @@ function extension_js(type, module, filename)
 		module._compile(content, filename);
 	}
 
-	var oldmodule = loaded_mods[filename];
-	var newmodule = require.cache[filename];
+	let oldmodule = loaded_mods[filename],
+	newmodule = require.cache[filename];
 	// require('repl').start() resets require.cache?
 	if (typeof(newmodule) !== 'object') return;
 
@@ -260,7 +255,7 @@ function stripBOM(content)
 // this is synchronous function but it can load data that have been asynchronously loaded earlier
 function get_file_contents(filename)
 {
-	var content = fscache[filename] || fs.readFileSync(filename, 'utf8');
+	let content = fscache[filename] || fs.readFileSync(filename, 'utf8');
 	return stripBOM(content);
 }
 
@@ -302,32 +297,32 @@ function reload(cb)
 function extensions(list)
 {
 	if (list === undefined) {
-		var res = {};
-		for (var i in current_extensions) res[i] = current_extensions[i];
+		let res = {};
+		for (let i in current_extensions) res[i] = current_extensions[i];
 		return res;
 	}
 
 	if (typeof(list) == "string") {
-		var hash = {};
+		let hash = {};
 		hash[list] = 'js';
 		return extensions.call(this, hash);
 	}
 
 	if (typeof(list) != "object") throw new Error('type error');
 	if (list instanceof Array) {
-		var hash = {};
+		let hash = {};
 		list.forEach(function(x) {
 			hash[x] = 'js';
 		});
 		return extensions.call(this, hash);
 	}
 	
-	var _extensions_copy = {};
-	for (var arg in current_extensions) {
+	let _extensions_copy = {};
+	for (let arg in current_extensions) {
 		_extensions_copy[arg] = current_extensions[arg];
 	}
 
-	for (var arg in list) {
+	for (let arg in list) {
 		if (_extensions_copy[arg] != list[arg]) {
 			restore_extension(arg);
 			delete _extensions_copy[arg];
@@ -338,33 +333,33 @@ function extensions(list)
 		delete _extensions_copy[arg];
 	}
 	
-	for (var arg in _extensions_copy) {
+	for (let arg in _extensions_copy) {
 		if (_extensions_copy[arg]) {
 			restore_extension(arg);
 		}
 	}
 
-	var res = {};
-	for (var i in current_extensions) res[i] = current_extensions[i];
+	let res = {};
+	for (let i in current_extensions) res[i] = current_extensions[i];
 	return res;
 }
 
 // here should be function to trigger code changing
 function watch_file(filename)
 {
-	var w = fs.watch(filename, {persistent: false}, function() {
+	let w = chokidar.watch(filename,{awaitWriteFinish:true}).on("change",()=>{
 		emitter.emit('change', filename);
 		if (autoreload) {
 			reload_file_force(filename);
 		}
+		watchfilenames[filename] = w;
 	});
-	watchfilenames[filename] = w;
 }
 
 // unwatch all loaded modules
 function unwatch_all()
 {
-	for (var mod in watchfilenames) {
+	for (let mod in watchfilenames) {
 		watchfilenames[mod].close();
 	}
 	watchfilenames = {};
@@ -374,7 +369,7 @@ function unwatch_all()
 // watch on all loaded modules
 function watch_all()
 {
-	for (var mod in loaded) {
+	for (let mod in loaded) {
 		watch_file(mod);
 	}
 	watchfiles = true;
@@ -398,7 +393,7 @@ function setwatch(newvalue)
 // return value is the whole new config
 function configure(hash)
 {
-	var result = {};
+	let result = {};
 	if (hash.autoreload !== undefined) autoreload = hash.autoreload;
 	result.extensions = extensions(hash.extensions);
 	result.watch = setwatch(hash.watch);
